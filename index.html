@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Metadata Viewer & Wiper</title>
+    <style>
+        :root {
+            --bg-color: #f0f2f5;
+            --text-color: #1c1e21;
+            --container-bg: #ffffff;
+            --container-shadow: rgba(0,0,0,0.1);
+            --border-color: #ddd;
+            --input-bg: #f8f9fa;
+            --input-border: #ced4da;
+            --accent-color: #007bff;
+            --accent-hover-color: #0056b3;
+            --pre-bg: #eef1f5;
+            --pre-border: #d1d9e0;
+            --placeholder-text: #6c757d;
+            --button-text-color: #fff;
+            --button-secondary-bg: #6c757d;
+            --button-secondary-hover-bg: #5a6268;
+            --icon-filter:_initial;
+        }
+
+        body.dark-theme {
+            --bg-color: #18191a;
+            --text-color: #e4e6eb;
+            --container-bg: #242526;
+            --container-shadow: rgba(0,0,0,0.3);
+            --border-color: #44484f;
+            --input-bg: #3a3b3c;
+            --input-border: #505357;
+            --accent-color: #0a84ff; /* Brighter blue for dark mode */
+            --accent-hover-color: #0060df;
+            --pre-bg: #2c2d2f;
+            --pre-border: #3e4042;
+            --placeholder-text: #adb5bd;
+            --button-secondary-bg: #4e4f50;
+            --button-secondary-hover-bg: #5a5b5c;
+            --icon-filter: invert(100%) sepia(0%) saturate(7500%) hue-rotate(180deg) brightness(100%) contrast(100%);
+
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column; /* For header and main content */
+            align-items: center;
+            min-height: 100vh;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .header-controls {
+            width: 90%;
+            max-width: 900px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .theme-toggle-btn, .wipe-metadata-btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            background-color: var(--accent-color);
+            color: var(--button-text-color);
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+        .theme-toggle-btn:hover, .wipe-metadata-btn:hover:not(:disabled) {
+            background-color: var(--accent-hover-color);
+        }
+        .theme-toggle-btn img {
+            width: 16px;
+            height: 16px;
+            vertical-align: middle;
+            filter: var(--icon-filter);
+        }
+
+        .wipe-metadata-btn {
+            background-color: var(--button-secondary-bg);
+        }
+        .wipe-metadata-btn:disabled {
+            background-color: #ccc; /* A neutral disabled color */
+            color: #777;
+            cursor: not-allowed;
+        }
+        body.dark-theme .wipe-metadata-btn:disabled {
+            background-color: #555;
+            color: #999;
+        }
+
+
+        .container {
+            background-color: var(--container-bg);
+            padding: 25px 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px var(--container-shadow);
+            width: 90%;
+            max-width: 900px;
+            transition: background-color 0.3s, box-shadow 0.3s;
+        }
+        h1 {
+            text-align: center;
+            color: var(--text-color);
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 1.8em;
+        }
+        .subtitle {
+            text-align: center;
+            color: var(--placeholder-text);
+            margin-bottom: 25px;
+            font-size: 0.95em;
+        }
+
+        .drop-zone {
+            display: grid;
+            border: 2px dashed var(--accent-color);
+            border-radius: 8px;
+            padding: 120px 30px;
+            text-align: center;
+            cursor: pointer;
+            background-color: var(--input-bg);
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+            margin-bottom: 20px;
+        }
+        .drop-zone.dragover {
+            background-color: var(--pre-bg); /* Use pre-bg for subtle change */
+            border-color: var(--accent-hover-color);
+        }
+        .drop-zone p {
+            margin: 0;
+            font-size: 1.1em;
+            color: var(--text-color);
+        }
+        .drop-zone .browse-link {
+            color: var(--accent-color);
+            text-decoration: underline;
+            font-weight: bold;
+        }
+
+        #imageFile { display: none; }
+
+        .output {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            margin-top: 20px;
+        }
+        @media (min-width: 768px) {
+            .output { flex-direction: row; }
+        }
+
+        .image-preview-area, .metadata-area {
+            flex: 1;
+            min-width: 0;
+        }
+        .image-preview-container {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: var(--input-bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 200px;
+            height: auto;
+            max-height: 450px;
+            overflow: hidden;
+        }
+        #imagePreviewPlaceholder {
+            color: var(--placeholder-text);
+            padding: 20px;
+            text-align: center;
+        }
+        #imagePreview {
+            max-width: 100%;
+            max-height: 450px;
+            object-fit: contain;
+            border-radius: 6px;
+        }
+        .metadata-area { flex: 1.2; }
+        #metadataOutput {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background-color: var(--pre-bg);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--pre-border);
+            min-height: 200px;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+            font-size: 0.85em;
+            line-height: 1.5;
+            max-height: 450px;
+            overflow-y: auto;
+        }
+        .hidden { display: none !important; }
+        .status-message {
+            text-align: center;
+            margin-top: 10px;
+            font-style: italic;
+            color: var(--placeholder-text);
+        }
+    </style>
+</head>
+<body>
+    <div class="header-controls">
+        <button id="themeToggleBtn" class="theme-toggle-btn">
+            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Cpath d='M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.106a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5h2.25a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.106 7.166a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z'/%3E%3C/svg%3E" alt="Toggle Theme">
+            Light
+        </button>
+        <button id="wipeMetadataBtn" class="wipe-metadata-btn" disabled>Wipe Metadata & Download</button>
+    </div>
+
+    <div class="container">
+        <h1>🖼️ Image Metadata Viewer & Wiper</h1>
+        <p class="subtitle">Extracts parameters from A1111/ComfyUI images and allows metadata removal.<br>Supports PNG, JPEG, and WebP files.</p>
+
+        <div id="dropZone" class="drop-zone">
+            <p>Drag & drop an image here, or <label for="imageFile" class="browse-link">click to browse</label>.</p>
+        </div>
+        <input type="file" id="imageFile" accept="image/png, image/jpeg, image/webp">
+        <p id="statusMessage" class="status-message"></p>
+
+        <div class="output">
+            <div class="image-preview-area">
+                <h2>Preview:</h2>
+                <div class="image-preview-container">
+                    <div id="imagePreviewPlaceholder"><p>Image preview will appear here.</p></div>
+                    <img id="imagePreview" src="#" alt="Image Preview" class="hidden">
+                </div>
+            </div>
+            <div class="metadata-area">
+                <h2>Metadata:</h2>
+                <pre id="metadataOutput">No image selected.</pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const imageFileInput = document.getElementById('imageFile');
+        const imagePreview = document.getElementById('imagePreview');
+        const imagePreviewPlaceholder = document.getElementById('imagePreviewPlaceholder');
+        const metadataOutput = document.getElementById('metadataOutput');
+        const dropZone = document.getElementById('dropZone');
+        const themeToggleBtn = document.getElementById('themeToggleBtn');
+        const wipeMetadataBtn = document.getElementById('wipeMetadataBtn');
+        const statusMessage = document.getElementById('statusMessage');
+
+        let currentFile = null;
+        let currentFileType = null;
+        let hasRelevantMetadata = false;
+
+        const sunIcon = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor'%3E%3Cpath d='M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.106a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5h2.25a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.106 7.166a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z'/%3E%3C/svg%3E";
+        const moonIcon = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor'%3E%3Cpath fill-rule='evenodd' d='M9.528 1.718a.75.75 0 01.162.819A8.97 8.97 0 009 6a9 9 0 009 9 8.97 8.97 0 003.463-.69.75.75 0 01.981.981A10.503 10.503 0 0112 22.5C6.201 22.5 1.5 17.799 1.5 12A10.503 10.503 0 017.69 2.013a.75.75 0 01.819-.295z' clip-rule='evenodd'/%3E%3C/svg%3E";
+
+        // Theme Manager
+        function applyTheme(theme) {
+            if (theme === 'dark') {
+                document.body.classList.add('dark-theme');
+                themeToggleBtn.innerHTML = `<img src="${sunIcon}" alt="Sun Icon"> Light`;
+            } else {
+                document.body.classList.remove('dark-theme');
+                themeToggleBtn.innerHTML = `<img src="${moonIcon}" alt="Moon Icon"> Dark`;
+            }
+        }
+
+        themeToggleBtn.addEventListener('click', () => {
+            const currentTheme = document.body.classList.contains('dark-theme') ? 'dark' : 'light';
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            localStorage.setItem('theme', newTheme);
+            applyTheme(newTheme);
+        });
+
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        applyTheme(savedTheme);
+
+
+        function resetUI() {
+            imagePreview.classList.add('hidden');
+            imagePreview.src = "#";
+            imagePreviewPlaceholder.classList.remove('hidden');
+            metadataOutput.textContent = 'No image selected.';
+            imageFileInput.value = '';
+            currentFile = null;
+            currentFileType = null;
+            hasRelevantMetadata = false;
+            wipeMetadataBtn.disabled = true;
+            statusMessage.textContent = '';
+        }
+
+        function handleFile(fileToProcess) {
+            if (!fileToProcess) {
+                resetUI();
+                return;
+            }
+
+            currentFile = fileToProcess; // Store for wipe function
+            currentFileType = currentFile.type;
+
+            if (!['image/png', 'image/jpeg', 'image/webp'].includes(currentFileType)) {
+                metadataOutput.textContent = `Unsupported file type: ${currentFileType}. Please select a PNG, JPEG, or WebP image.`;
+                imagePreview.classList.add('hidden');
+                imagePreviewPlaceholder.classList.remove('hidden');
+                imagePreview.src = "#";
+                hasRelevantMetadata = false;
+                wipeMetadataBtn.disabled = true;
+                statusMessage.textContent = '';
+                return;
+            }
+
+            imagePreviewPlaceholder.classList.add('hidden');
+            imagePreview.classList.remove('hidden');
+            metadataOutput.textContent = 'Processing...';
+            statusMessage.textContent = '';
+            wipeMetadataBtn.disabled = true;
+
+            const readerPreview = new FileReader();
+            readerPreview.onload = (e) => imagePreview.src = e.target.result;
+            readerPreview.readAsDataURL(currentFile);
+
+            const readerMetadata = new FileReader();
+            readerMetadata.onload = (e) => {
+                try {
+                    extractMetadata(e.target.result, currentFileType);
+                } catch (error) {
+                    console.error("Error reading file for metadata:", error);
+                    metadataOutput.textContent = `Error reading file for metadata: ${error.message}`;
+                }
+            };
+            readerMetadata.onerror = () => metadataOutput.textContent = 'Error reading file for metadata.';
+            readerMetadata.readAsArrayBuffer(currentFile);
+        }
+
+        imageFileInput.addEventListener('change', (event) => handleFile(event.target.files[0]));
+        dropZone.addEventListener('click', () => imageFileInput.click());
+        dropZone.addEventListener('dragover', (event) => { event.preventDefault(); event.stopPropagation(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', (event) => { event.preventDefault(); event.stopPropagation(); dropZone.classList.remove('dragover'); });
+        dropZone.addEventListener('drop', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            dropZone.classList.remove('dragover');
+            if (event.dataTransfer.files.length > 0) {
+                imageFileInput.files = event.dataTransfer.files;
+                handleFile(event.dataTransfer.files[0]);
+            }
+        });
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            document.body.addEventListener(eventName, (e) => {
+                if (!dropZone.contains(e.target)) { e.preventDefault(); e.stopPropagation(); }
+            });
+        });
+
+        function extractMetadata(arrayBuffer, fileType) {
+            let foundMetadata = [];
+            if (fileType === 'image/png') {
+                foundMetadata = parsePngMetadata(arrayBuffer);
+            } else if (fileType === 'image/jpeg' || fileType === 'image/webp') {
+                foundMetadata = parseJpegOrWebPMetadata(arrayBuffer, fileType);
+            } else {
+                metadataOutput.textContent = `Unsupported file type: ${fileType}`;
+                return;
+            }
+
+            if (foundMetadata.length > 0) {
+                hasRelevantMetadata = true;
+                wipeMetadataBtn.disabled = false;
+                let outputText = "";
+                foundMetadata.forEach(meta => {
+                    outputText += `Found field: "${meta.keyword}"\n\n`;
+                    try {
+                        const jsonData = JSON.parse(meta.text);
+                        outputText += JSON.stringify(jsonData, null, 2);
+                    } catch (e) { outputText += meta.text; }
+                    outputText += "\n\n";
+                });
+                metadataOutput.textContent = outputText.trim();
+            } else {
+                hasRelevantMetadata = false;
+                wipeMetadataBtn.disabled = true;
+                metadataOutput.textContent = 'No A1111/ComfyUI specific metadata found in standard locations for this image.';
+            }
+        }
+
+        function parsePngMetadata(arrayBuffer) {
+            const metadata = [];
+            const dataView = new DataView(arrayBuffer);
+            const textDecoder = new TextDecoder('utf-8');
+            const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+            for (let i = 0; i < pngSignature.length; i++) {
+                if (dataView.getUint8(i) !== pngSignature[i]) {
+                    console.error('Not a valid PNG file.');
+                    metadataOutput.textContent = 'Error: Not a valid PNG file.';
+                    return metadata;
+                }
+            }
+
+            let offset = 8;
+            while (offset < dataView.byteLength) {
+                if (offset + 8 > dataView.byteLength) break;
+                const length = dataView.getUint32(offset, false);
+                const typeBytes = new Uint8Array(arrayBuffer, offset + 4, 4);
+                const type = textDecoder.decode(typeBytes);
+                const chunkDataOffset = offset + 8;
+
+                if (chunkDataOffset + length > dataView.byteLength) break;
+
+                if (type === 'tEXt' || type === 'iTXt') {
+                    const chunkData = new Uint8Array(arrayBuffer, chunkDataOffset, length);
+                    let keywordEnd = -1;
+                    for(let i=0; i < chunkData.length; i++) {
+                        if (chunkData[i] === 0) { keywordEnd = i; break; }
+                    }
+
+                    if (keywordEnd !== -1) {
+                        const keyword = textDecoder.decode(chunkData.slice(0, keywordEnd));
+                        let textValue = "";
+                        // Simplified parsing for display, full parsing for removal in stripPngMetadata
+                        if (type === 'tEXt') {
+                            textValue = textDecoder.decode(chunkData.slice(keywordEnd + 1));
+                        } else { // iTXt (simplified for display)
+                            let textStart = keywordEnd + 1;
+                             // Skip comp_flag, comp_method, lang_tag, trans_keyword based on nulls
+                            for (let i=0; i < 4 && textStart < chunkData.length; i++) {
+                                let nullPos = -1;
+                                for (let j=textStart; j < chunkData.length; j++) {
+                                    if (chunkData[j] === 0) { nullPos = j; break;}
+                                }
+                                if (i < 2 && nullPos === textStart) { // comp_flag or comp_method (single byte + null)
+                                    textStart = nullPos + 1;
+                                } else if (nullPos !== -1) { // lang_tag or trans_keyword
+                                    textStart = nullPos + 1;
+                                } else { break; } // No more nulls or malformed
+                            }
+                            if(textStart < chunkData.length) { // Check if there is text after potential fields
+                               textValue = textDecoder.decode(chunkData.slice(textStart));
+                            } else { // Fallback if parsing above fails to find text
+                               textValue = textDecoder.decode(chunkData.slice(keywordEnd + 1)); // Show raw if complex
+                            }
+                        }
+
+                        if (['parameters', 'prompt', 'workflow', 'comment'].includes(keyword.toLowerCase())) {
+                             metadata.push({ keyword, text: textValue.replace(/\0+$/, '') });
+                        }
+                    }
+                } else if (type === 'IEND') {
+                    break;
+                }
+                offset = chunkDataOffset + length + 4;
+            }
+            return metadata;
+        }
+
+        function parseJpegOrWebPMetadata(arrayBuffer, fileType) {
+            const metadata = [];
+            const textDecoder = new TextDecoder('utf-8', { fatal: false });
+            const uint8Array = new Uint8Array(arrayBuffer);
+            let fileAsString = "";
+            try { fileAsString = textDecoder.decode(uint8Array); }
+            catch (e) { fileAsString = new TextDecoder('latin1').decode(uint8Array); }
+
+            const a1111Pattern = /parameters\s*:\s*([\s\S]*?)(Negative prompt:|Steps:|Seed:|[\0\n]{2,}|$)/i;
+            let match = fileAsString.match(a1111Pattern);
+            if (match && match[1] && match[1].trim().length > 20) {
+                let params = match[1].trim();
+                const fullBlockMatch = fileAsString.substring(match.index).match(/(parameters\s*:\s*[\s\S]*?)(Seed: \d+.*|CFG scale:.*|Size:.*|[\0]{2,}|$)/is);
+                if (fullBlockMatch && fullBlockMatch[1]) params = fullBlockMatch[1].trim();
+                metadata.push({ keyword: `parameters (${fileType} heuristic)`, text: params });
+            }
+
+            const comfyPattern = /"prompt":\s*(\{[\s\S]*?\})(?:,\s*"workflow":\s*(\{[\s\S]*?\}))?|"workflow":\s*(\{[\s\S]*?\})/gi;
+            while ((match = comfyPattern.exec(fileAsString)) !== null) {
+                if (match[1]) try { JSON.parse(match[1]); metadata.push({ keyword: `prompt (${fileType} JSON)`, text: match[1] }); } catch (e) {}
+                if (match[2]) try { JSON.parse(match[2]); metadata.push({ keyword: `workflow (${fileType} JSON)`, text: match[2] }); } catch (e) {}
+                if (match[3]) try { JSON.parse(match[3]); metadata.push({ keyword: `workflow (${fileType} JSON)`, text: match[3] }); } catch (e) {}
+            }
+
+            if (fileType === 'image/webp' && metadata.length === 0) {
+                const webpCommentPattern = /(?:UserComment|parameters|Comment)\s*[:\0\s]([\s\S]{50,})(?:\0|$)/i;
+                match = fileAsString.match(webpCommentPattern);
+                if (match && match[1]) metadata.push({ keyword: `comment/parameters (WebP heuristic)`, text: match[1].trim().split('\0')[0] });
+            }
+
+            const exifUserCommentPattern = /UserComment\0{3,8}(?:ASCII|UNICODE|JIS)\0{0,8}([\s\S]+?)(?:\0\0|$)/;
+            match = fileAsString.match(exifUserCommentPattern);
+            if (match && match[1]) {
+                let potentialParams = match[1].trim();
+                if (potentialParams.toLowerCase().startsWith("steps:") || potentialParams.includes("Negative prompt:") || potentialParams.includes("Sampler:")) {
+                    if (!metadata.some(m => m.keyword.includes("parameters") && m.text.length > potentialParams.length * 0.8)) {
+                        metadata.push({ keyword: "parameters (JPEG EXIF UserComment)", text: potentialParams });
+                    }
+                }
+            }
+            if (metadata.length > 1) {
+                const paramEntries = metadata.filter(m => m.keyword.toLowerCase().includes("parameters"));
+                if (paramEntries.length > 1) {
+                    paramEntries.sort((a, b) => b.text.length - a.text.length);
+                    const longestParam = paramEntries[0];
+                    return metadata.filter(m => !(m.keyword.toLowerCase().includes("parameters") && m !== longestParam && longestParam.text.includes(m.text.substring(0, Math.min(m.text.length, 50)))));
+                }
+            }
+            return metadata;
+        }
+
+        // --- WIPE METADATA FUNCTIONALITY ---
+        wipeMetadataBtn.addEventListener('click', async () => {
+            if (!currentFile || !hasRelevantMetadata) return;
+
+            if (!confirm("This will attempt to remove A1111/ComfyUI metadata and offer a new image for download. The original file will not be changed. Continue?")) {
+                return;
+            }
+
+            statusMessage.textContent = 'Wiping metadata... please wait.';
+            wipeMetadataBtn.disabled = true;
+
+            try {
+                let newBlob;
+                if (currentFileType === 'image/png') {
+                    const arrayBuffer = await currentFile.arrayBuffer();
+                    newBlob = stripPngMetadata(arrayBuffer);
+                } else if (currentFileType === 'image/jpeg' || currentFileType === 'image/webp') {
+                    newBlob = await stripMetadataWithCanvas(currentFile);
+                } else {
+                    throw new Error("Unsupported file type for wiping.");
+                }
+
+                if (newBlob) {
+                    downloadBlob(newBlob, `wiped_${currentFile.name}`);
+                    statusMessage.textContent = 'Metadata wiped. Download should start shortly.';
+                } else {
+                    throw new Error("Failed to create wiped image blob.");
+                }
+            } catch (error) {
+                console.error("Error wiping metadata:", error);
+                statusMessage.textContent = `Error wiping metadata: ${error.message}`;
+            } finally {
+                 // Re-enable button only if metadata was originally found, otherwise it stays disabled
+                 if(hasRelevantMetadata) wipeMetadataBtn.disabled = false;
+            }
+        });
+
+        function stripPngMetadata(arrayBuffer) {
+            const dataView = new DataView(arrayBuffer);
+            const textDecoder = new TextDecoder('utf-8');
+            const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+            const metadataKeywordsToRemove = ['parameters', 'prompt', 'workflow', 'comment'];
+
+            let outputBytes = [...pngSignature]; // Start with PNG signature
+
+            let offset = 8;
+            while (offset < dataView.byteLength) {
+                if (offset + 8 > dataView.byteLength) break; // Ensure space for length and type
+
+                const chunkLength = dataView.getUint32(offset, false);
+                const chunkTypeBytes = new Uint8Array(arrayBuffer, offset + 4, 4);
+                const chunkType = textDecoder.decode(chunkTypeBytes);
+                const chunkDataOffset = offset + 8;
+                const chunkCrcOffset = chunkDataOffset + chunkLength;
+
+                if (chunkCrcOffset + 4 > dataView.byteLength) break; // Ensure space for data and CRC
+
+                let skipChunk = false;
+                if (chunkType === 'tEXt' || chunkType === 'iTXt') {
+                    const chunkData = new Uint8Array(arrayBuffer, chunkDataOffset, chunkLength);
+                    let keywordEnd = -1;
+                    for(let i=0; i < chunkData.length; i++) {
+                        if (chunkData[i] === 0) { keywordEnd = i; break; }
+                    }
+                    if (keywordEnd !== -1) {
+                        const keyword = textDecoder.decode(chunkData.slice(0, keywordEnd)).toLowerCase();
+                        if (metadataKeywordsToRemove.includes(keyword)) {
+                            skipChunk = true;
+                        }
+                    }
+                }
+
+                if (!skipChunk) {
+                    // Copy full chunk (Length, Type, Data, CRC)
+                    const chunkHeader = new Uint8Array(arrayBuffer, offset, 8); // Length + Type
+                    const chunkData = new Uint8Array(arrayBuffer, chunkDataOffset, chunkLength);
+                    const chunkCrc = new Uint8Array(arrayBuffer, chunkCrcOffset, 4);
+
+                    outputBytes.push(...chunkHeader, ...chunkData, ...chunkCrc);
+                }
+
+                if (chunkType === 'IEND') break; // Stop after IEND
+                offset = chunkCrcOffset + 4; // Move to the next chunk
+            }
+            return new Blob([new Uint8Array(outputBytes)], { type: 'image/png' });
+        }
+
+        async function stripMetadataWithCanvas(file) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.naturalWidth;
+                    canvas.height = img.naturalHeight;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+
+                    let quality = 0.92; // Default for JPEG
+                    if (file.type === 'image/webp') quality = 0.90; // WebP can often use slightly lower
+
+                    canvas.toBlob(blob => {
+                        if (blob) resolve(blob);
+                        else reject(new Error("Canvas toBlob failed."));
+                    }, file.type, quality);
+                };
+                img.onerror = () => reject(new Error("Failed to load image for canvas processing."));
+                img.src = URL.createObjectURL(file); // Use Object URL for reliability
+            });
+        }
+
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        resetUI(); // Initial call
+    </script>
+</body>
+</html>
