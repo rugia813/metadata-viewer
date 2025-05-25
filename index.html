@@ -246,6 +246,40 @@
     </div>
 
     <script>
+        // Helper function to handle circular references in JSON
+        function safeStringify(obj) {
+            const seen = new WeakSet();
+            return JSON.stringify(obj, (key, value) => {
+                if (key === 'parent' || key === 'ingredients') return undefined; // Skip circular references
+                if (typeof value === 'object' && value !== null) {
+                    if (seen.has(value)) return '[Circular]';
+                    seen.add(value);
+                }
+                return value;
+            }, 2);
+        }
+    </script>
+
+    <script type="module">
+        import { createC2pa } from 'https://cdn.jsdelivr.net/npm/c2pa@0.17.2/+esm';
+
+        // Initialize C2PA and expose it globally
+        window.initC2pa = async () => {
+            try {
+                window.c2paInstance = await createC2pa({
+                    wasmSrc: 'https://cdn.jsdelivr.net/npm/c2pa@0.17.2/dist/assets/wasm/toolkit_bg.wasm',
+                    workerSrc: 'https://cdn.jsdelivr.net/npm/c2pa@0.17.2/dist/c2pa.worker.min.js'
+                });
+                console.log('C2PA initialized successfully');
+            } catch (err) {
+                console.error('Error initializing C2PA:', err);
+            }
+        };
+
+        // Initialize C2PA when the module loads
+        window.initC2pa();
+    </script>
+    <script>
         const imageFileInput = document.getElementById('imageFile');
         const imagePreview = document.getElementById('imagePreview');
         const imagePreviewPlaceholder = document.getElementById('imagePreviewPlaceholder');
@@ -298,7 +332,7 @@
             statusMessage.textContent = '';
         }
 
-        function handleFile(fileToProcess) {
+        async function handleFile(fileToProcess) {
             if (!fileToProcess) {
                 resetUI();
                 return;
@@ -341,6 +375,8 @@
             readerMetadata.readAsArrayBuffer(currentFile);
         }
 
+        let foundMetadata = [];
+
         imageFileInput.addEventListener('change', (event) => handleFile(event.target.files[0]));
         dropZone.addEventListener('click', () => imageFileInput.click());
         dropZone.addEventListener('dragover', (event) => { event.preventDefault(); event.stopPropagation(); dropZone.classList.add('dragover'); });
@@ -360,8 +396,8 @@
             });
         });
 
-        function extractMetadata(arrayBuffer, fileType) {
-            let foundMetadata = [];
+        async function extractMetadata(arrayBuffer, fileType) {
+            foundMetadata = [];
             if (fileType === 'image/png') {
                 foundMetadata = parsePngMetadata(arrayBuffer);
             } else if (fileType === 'image/jpeg' || fileType === 'image/webp') {
@@ -369,6 +405,37 @@
             } else {
                 metadataOutput.textContent = `Unsupported file type: ${fileType}`;
                 return;
+            }
+
+            // Read C2PA manifest if available
+            if (window.c2paInstance) {
+                try {
+                    const blob = new Blob([currentFile], { type: currentFile.type });
+                    const objectURL = URL.createObjectURL(blob);
+
+                    try {
+                        const { manifestStore } = await window.c2paInstance.read(objectURL);
+                        if (manifestStore?.activeManifest) {
+                            foundMetadata.push({
+                                keyword: 'C2PA Manifest',
+                                text: safeStringify(manifestStore.activeManifest)
+                            });
+                        }
+                    } catch (readErr) {
+                        // Ignore CBOR conversion errors as they indicate no C2PA data
+                        if (!readErr.toString().includes('claim could not be converted from CBOR')) {
+                            console.error('Error reading C2PA manifest:', readErr);
+                            foundMetadata.push({
+                                keyword: 'C2PA Status',
+                                text: 'Error reading C2PA manifest: ' + readErr.message
+                            });
+                        }
+                    }
+
+                    URL.revokeObjectURL(objectURL);
+                } catch (err) {
+                    console.error('Error creating blob for C2PA:', err);
+                }
             }
 
             if (foundMetadata.length > 0) {
